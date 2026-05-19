@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-const API_BASE = "http://localhost:5000";
+const API_BASE = "https://gallery.snorlax.codes";
 
 export default function CoOccurrenceGraph() {
   const canvasRef = useRef(null);
   const [data, setData] = useState({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
+  const [settling, setSettling] = useState(true);
   const [err, setErr] = useState(null);
   const [tooltip, setTooltip] = useState(null);
-  const simRef = useRef(null);
   const nodesRef = useRef([]);
   const animRef = useRef(null);
 
@@ -15,7 +15,7 @@ export default function CoOccurrenceGraph() {
     setLoading(true);
     fetch(`${API_BASE}/co-occurrence`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => { setData(d); setLoading(false); setSettling(true); })
       .catch(e => { setErr(e.message); setLoading(false); });
   }, []);
 
@@ -36,7 +36,7 @@ export default function CoOccurrenceGraph() {
 
     const maxW = Math.max(1, ...data.edges.map(e => e.weight));
 
-    function tick() {
+    function simulateStep() {
       const ns = nodesRef.current;
       // Repulsion
       for (let i = 0; i < ns.length; i++) {
@@ -67,7 +67,10 @@ export default function CoOccurrenceGraph() {
         n.x = Math.max(30, Math.min(W - 30, n.x + n.vx));
         n.y = Math.max(30, Math.min(H - 30, n.y + n.vy));
       }
+    }
 
+    function renderCanvas() {
+      const ns = nodesRef.current;
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = "#080d14";
@@ -106,16 +109,31 @@ export default function CoOccurrenceGraph() {
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(n.label.slice(0, 8), n.x, n.y);
       }
-
-      animRef.current = requestAnimationFrame(tick);
     }
-    animRef.current = requestAnimationFrame(tick);
+
+    let ticks = 0;
+    function stabilize() {
+      for(let i=0; i<5; i++) {
+        simulateStep();
+        ticks++;
+      }
+      if (ticks < 150) {
+        animRef.current = requestAnimationFrame(stabilize);
+      } else {
+        setSettling(false);
+        renderCanvas();
+      }
+    }
+    
+    setSettling(true);
+    stabilize();
+
     return () => cancelAnimationFrame(animRef.current);
   }, [data]);
 
   const handleMouseMove = useCallback((e) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || settling) return;
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
     const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
@@ -127,7 +145,7 @@ export default function CoOccurrenceGraph() {
       }
     }
     setTooltip(null);
-  }, []);
+  }, [settling]);
 
   if (loading) return <div style={{ color: "#4b5563", textAlign: "center", padding: 40, fontFamily: "monospace" }}>Loading co-occurrence data...</div>;
   if (err) return <div style={{ color: "#e53e3e", padding: 20, fontFamily: "monospace" }}>Error: {err}</div>;
@@ -135,9 +153,27 @@ export default function CoOccurrenceGraph() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", minHeight: 500 }}>
+      <style>{`
+        @keyframes spinNode { 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      `}</style>
+      
+      {settling && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 10, background: "#080d14", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+          <div style={{ position: "relative", width: 60, height: 60 }}>
+            <div style={{ position: "absolute", inset: 0, border: "3px solid #1f2937", borderRadius: "50%" }}></div>
+            <div style={{ position: "absolute", inset: 0, border: "3px solid transparent", borderTopColor: "#f6ad10", borderRightColor: "#f6ad10", borderRadius: "50%", animation: "spinNode 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite" }}></div>
+            <div style={{ position: "absolute", inset: 10, border: "2px solid transparent", borderBottomColor: "#60a5fa", borderLeftColor: "#60a5fa", borderRadius: "50%", animation: "spinNode 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse" }}></div>
+            <div style={{ position: "absolute", inset: 20, background: "#a78bfa", borderRadius: "50%", opacity: 0.5, animation: "pulse 2s infinite" }}></div>
+          </div>
+          <div style={{ color: "#f6ad10", fontFamily: "monospace", fontSize: 13, letterSpacing: 3, fontWeight: 600 }}>CALCULATING NETWORK PHYSICS...</div>
+          <div style={{ color: "#4b5563", fontFamily: "monospace", fontSize: 10, letterSpacing: 1 }}>STABILIZING NODES</div>
+        </div>
+      )}
+
       <canvas ref={canvasRef} onMouseMove={handleMouseMove}
-        style={{ width: "100%", height: "100%", borderRadius: 12, display: "block", cursor: "crosshair" }} />
-      {tooltip && (
+        style={{ width: "100%", height: "100%", borderRadius: 12, display: "block", cursor: "crosshair", opacity: settling ? 0 : 1, transition: "opacity 0.6s ease-out" }} />
+      {tooltip && !settling && (
         <div style={{
           position: "fixed", left: tooltip.x + 12, top: tooltip.y - 10,
           background: "#0f1623", border: `1px solid ${tooltip.isStranger ? "#4a3060" : "#1e4f72"}`,
@@ -147,7 +183,7 @@ export default function CoOccurrenceGraph() {
           {tooltip.label}
         </div>
       )}
-      <div style={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 12, alignItems: "center" }}>
+      <div style={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 12, alignItems: "center", opacity: settling ? 0 : 1, transition: "opacity 0.6s ease-out" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#60a5fa" }} />
           <span style={{ fontSize: 11, color: "#4b5563", fontFamily: "monospace" }}>Registered</span>

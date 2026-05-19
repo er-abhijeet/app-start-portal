@@ -5,7 +5,26 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
-const API_BASE = "https://gallery.snorlax.codes:5000";
+const API_BASE = "https://gallery.snorlax.codes";
+
+const getValidImageUrl = (url) => {
+  if (!url) return "";
+
+  // 1. Target the consistent part of the path, regardless of stored IP/Port
+  const pathIndex = url.indexOf("/uploads/");
+  if (pathIndex !== -1) {
+    const path = url.substring(pathIndex); // Extracts '/uploads/filename.jpg'
+    return `${API_BASE}${path}`;
+  }
+
+  // 2. Pass through already valid absolute URLs (e.g., external links)
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  // 3. Fallback for other relative paths
+  return `${API_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
+};
 
 // ─── ICONS ─────────────────────────────────────────────────────────────────
 const Icon = {
@@ -444,6 +463,7 @@ function CoOccurrenceGraph({ photos, onPersonClick }) {
   const [edges, setEdges] = useState([]);
   const [hovered, setHovered] = useState(null);
   const [tooltip, setTooltip] = useState(null);
+  const [isSimulating, setIsSimulating] = useState(true);
   const simRunning = useRef(false);
 
   useEffect(() => {
@@ -482,6 +502,7 @@ function CoOccurrenceGraph({ photos, onPersonClick }) {
     nodesRef.current = layoutNodes;
     const edgeList = Object.values(edgeMap);
     setEdges(edgeList);
+    setIsSimulating(true);
 
     // Force simulation
     simRunning.current = true;
@@ -489,35 +510,48 @@ function CoOccurrenceGraph({ photos, onPersonClick }) {
     const simulate = () => {
       if (!simRunning.current) return;
       const ns = nodesRef.current;
-      for (let i = 0; i < ns.length; i++) {
-        for (let j = i + 1; j < ns.length; j++) {
-          const dx = ns[j].x - ns[i].x, dy = ns[j].y - ns[i].y;
-          const d = Math.max(Math.hypot(dx, dy), 1);
-          const f = 4000 / (d * d);
-          ns[i].vx -= (dx / d) * f; ns[i].vy -= (dy / d) * f;
-          ns[j].vx += (dx / d) * f; ns[j].vy += (dy / d) * f;
+      
+      // Run multiple steps per frame to settle faster
+      for (let step = 0; step < 5; step++) {
+        for (let i = 0; i < ns.length; i++) {
+          for (let j = i + 1; j < ns.length; j++) {
+            const dx = ns[j].x - ns[i].x, dy = ns[j].y - ns[i].y;
+            const d = Math.max(Math.hypot(dx, dy), 1);
+            const f = 4000 / (d * d);
+            ns[i].vx -= (dx / d) * f; ns[i].vy -= (dy / d) * f;
+            ns[j].vx += (dx / d) * f; ns[j].vy += (dy / d) * f;
+          }
         }
+        edgeList.forEach(e => {
+          const s = ns.find(n => n.id === e.source), t = ns.find(n => n.id === e.target);
+          if (!s || !t) return;
+          const dx = t.x - s.x, dy = t.y - s.y, d = Math.max(Math.hypot(dx, dy), 1);
+          const targetDist = 80 + e.count * 8;
+          const f = (d - targetDist) * 0.012;
+          s.vx += (dx / d) * f; s.vy += (dy / d) * f;
+          t.vx -= (dx / d) * f; t.vy -= (dy / d) * f;
+        });
+        ns.forEach(n => {
+          n.vx += (W / 2 - n.x) * 0.003; n.vy += (H / 2 - n.y) * 0.003;
+          n.vx *= 0.85; n.vy *= 0.85;
+          n.x = Math.max(50, Math.min(W - 50, n.x + n.vx));
+          n.y = Math.max(50, Math.min(H - 50, n.y + n.vy));
+        });
       }
-      edgeList.forEach(e => {
-        const s = ns.find(n => n.id === e.source), t = ns.find(n => n.id === e.target);
-        if (!s || !t) return;
-        const dx = t.x - s.x, dy = t.y - s.y, d = Math.max(Math.hypot(dx, dy), 1);
-        const targetDist = 80 + e.count * 8;
-        const f = (d - targetDist) * 0.012;
-        s.vx += (dx / d) * f; s.vy += (dy / d) * f;
-        t.vx -= (dx / d) * f; t.vy -= (dy / d) * f;
-      });
-      ns.forEach(n => {
-        n.vx += (W / 2 - n.x) * 0.003; n.vy += (H / 2 - n.y) * 0.003;
-        n.vx *= 0.85; n.vy *= 0.85;
-        n.x = Math.max(50, Math.min(W - 50, n.x + n.vx));
-        n.y = Math.max(50, Math.min(H - 50, n.y + n.vy));
-      });
-      setRenderTick(t => t + 1);
+      
+      // Skip render tick during simulation to prevent the "dancing" graph
       frame = requestAnimationFrame(simulate);
     };
     frame = requestAnimationFrame(simulate);
-    const stopTimer = setTimeout(() => { simRunning.current = false; cancelAnimationFrame(frame); }, 5000);
+    
+    // Stop after 1.5 seconds (effectively 7.5 seconds of simulation with 5x multiplier)
+    const stopTimer = setTimeout(() => { 
+      simRunning.current = false; 
+      cancelAnimationFrame(frame); 
+      setRenderTick(t => t + 1); // Render final state
+      setIsSimulating(false);
+    }, 1500); 
+    
     return () => { simRunning.current = false; cancelAnimationFrame(frame); clearTimeout(stopTimer); };
   }, [photos]);
 
@@ -608,8 +642,15 @@ function CoOccurrenceGraph({ photos, onPersonClick }) {
   const nodeCount = nodesRef.current.length;
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
+      {isSimulating && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 10, background: "#080d14", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: 12, border: "1px solid #1f2937" }}>
+          <Icon.Spinner style={{ width: 32, height: 32, color: "#f6ad10", marginBottom: 16 }} />
+          <div style={{ color: "#e2e8f0", fontFamily: "monospace", fontSize: 13, fontWeight: 700, letterSpacing: 1 }}>ANALYZING NETWORK RELATIONS</div>
+          <div style={{ color: "#6b7280", fontFamily: "monospace", fontSize: 11, marginTop: 8 }}>Computing optimal layout...</div>
+        </div>
+      )}
       <canvas ref={canvasRef} width={800} height={500}
-        style={{ width: "100%", height: "100%", borderRadius: 12, cursor: "pointer", display: "block", border: "1px solid #1f2937" }}
+        style={{ width: "100%", height: "100%", borderRadius: 12, cursor: "pointer", display: "block", border: "1px solid #1f2937", opacity: isSimulating ? 0 : 1, transition: "opacity 0.4s ease" }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { setHovered(null); setTooltip(null); }}
         onClick={handleClick}
@@ -648,7 +689,7 @@ function PhotoCard({ photo, onClick }) {
       <div style={{ aspectRatio: "16/10", background: "#0d1117", position: "relative", overflow: "hidden" }}>
         {imgErr
           ? <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon.ImageIcon style={{ width: 32, height: 32, color: "#374151" }} /></div>
-          : <img src={photo.image_url} alt="" onError={() => setImgErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
+          : <img src={getValidImageUrl(photo.image_url)} alt="" onError={() => setImgErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />}
         {photo.match_similarity != null && (
           <div style={{ position: "absolute", top: 6, right: 6, background: "#e53e3e", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4, fontFamily: "monospace" }}>
             FACE {(photo.match_similarity * 100).toFixed(0)}%
@@ -727,7 +768,7 @@ function PhotoModal({ photo, onClose, onPersonClick, personCtx }) {
               <Icon.ImageIcon style={{ width: 56, height: 56, color: "#374151" }} />
             ) : (
               <div style={{ position: "relative", display: "inline-block" }}>
-                <img src={photo.image_url} alt="" onError={() => setImgErr(true)} style={{ maxWidth: "100%", maxHeight: 420, display: "block" }} />
+                <img src={getValidImageUrl(photo.image_url)} alt="" onError={() => setImgErr(true)} style={{ maxWidth: "100%", maxHeight: 420, display: "block" }} />
                 {(showAllBboxes || showTargetBbox) && photo.ai_info && photo.ai_info.map((face, idx) => {
                   const b = face.bbox;
                   if (!b) return null;
