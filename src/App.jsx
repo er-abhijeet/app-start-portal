@@ -344,6 +344,11 @@ function HeatmapCanvas({ points }) {
 // ─── GEOFENCE DRAW MAP ─────────────────────────────────────────────────────
 function DrawEvents({ mode, onPolygonComplete }) {
   const [polygon, setPolygon] = useState([]);
+  const polygonRef = useRef([]);
+
+  useEffect(() => {
+    polygonRef.current = polygon;
+  }, [polygon]);
   
   useEffect(() => {
     if (mode === "view") setPolygon([]);
@@ -353,21 +358,21 @@ function DrawEvents({ mode, onPolygonComplete }) {
     click(e) {
       if (mode !== "draw") return;
       const { lat, lng } = e.latlng;
-      setPolygon(prev => {
-        const next = [...prev, { lat, lon: lng }];
-        if (next.length >= 3) {
-          const first = next[0];
-          const map = e.target;
-          const p1 = map.latLngToLayerPoint(e.latlng);
-          const p2 = map.latLngToLayerPoint([first.lat, first.lon]);
-          const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-          if (dist < 20) { // 20 pixels radius to close
-            onPolygonComplete(prev);
-            return [];
-          }
+      const prev = polygonRef.current;
+      
+      if (prev.length >= 2) {
+        const first = prev[0];
+        const map = e.target;
+        const p1 = map.latLngToLayerPoint(e.latlng);
+        const p2 = map.latLngToLayerPoint([first.lat, first.lon]);
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        if (dist < 20) { // 20 pixels radius to close
+          if (onPolygonComplete) onPolygonComplete(prev);
+          setPolygon([]);
+          return;
         }
-        return next;
-      });
+      }
+      setPolygon([...prev, { lat, lon: lng }]);
     }
   });
 
@@ -394,7 +399,7 @@ function GeofenceDrawMap({ onRegionDrawn, existingGeofences = [] }) {
   const [mode, setMode] = useState("view");
 
   const handleComplete = (polygon) => {
-    onRegionDrawn(polygon);
+    if (onRegionDrawn) onRegionDrawn(polygon);
     setMode("view");
   };
 
@@ -426,20 +431,22 @@ function GeofenceDrawMap({ onRegionDrawn, existingGeofences = [] }) {
         <DrawEvents mode={mode} onPolygonComplete={handleComplete} />
       </MapContainer>
       
-      <div style={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 8, zIndex: 1000 }}>
-        <button onClick={() => { setMode(m => m === "draw" ? "view" : "draw"); }}
-          style={{ background: mode === "draw" ? "#4ade80" : "#1f2937", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", color: mode === "draw" ? "#000" : "#9ca3af", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, pointerEvents: "auto" }}>
-          <Icon.Draw style={{ width: 13, height: 13 }} />
-          {mode === "draw" ? "Drawing — click near start to close" : "Draw Zone"}
-        </button>
-        {mode === "draw" && (
-          <button onClick={() => setMode("view")}
-            style={{ background: "#e53e3e20", border: "1px solid #e53e3e50", borderRadius: 8, padding: "7px 12px", cursor: "pointer", color: "#e53e3e", fontSize: 12, display: "flex", alignItems: "center", gap: 6, pointerEvents: "auto" }}>
-            <Icon.Eraser style={{ width: 13, height: 13 }} /> Cancel
+      {onRegionDrawn && (
+        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 8, zIndex: 1000 }}>
+          <button onClick={() => { setMode(m => m === "draw" ? "view" : "draw"); }}
+            style={{ background: mode === "draw" ? "#4ade80" : "#1f2937", border: "none", borderRadius: 8, padding: "7px 14px", cursor: "pointer", color: mode === "draw" ? "#000" : "#9ca3af", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, pointerEvents: "auto" }}>
+            <Icon.Draw style={{ width: 13, height: 13 }} />
+            {mode === "draw" ? "Drawing — click near start to close" : "Draw Zone"}
           </button>
-        )}
-      </div>
-      {mode === "draw" && (
+          {mode === "draw" && (
+            <button onClick={() => setMode("view")}
+              style={{ background: "#e53e3e20", border: "1px solid #e53e3e50", borderRadius: 8, padding: "7px 12px", cursor: "pointer", color: "#e53e3e", fontSize: 12, display: "flex", alignItems: "center", gap: 6, pointerEvents: "auto" }}>
+              <Icon.Eraser style={{ width: 13, height: 13 }} /> Cancel
+            </button>
+          )}
+        </div>
+      )}
+      {mode === "draw" && onRegionDrawn && (
         <div style={{ position: "absolute", bottom: 12, left: 12, background: "#0d1117dd", padding: "5px 12px", borderRadius: 7, fontSize: 11, color: "#4ade80", fontFamily: "monospace", zIndex: 1000 }}>
           Click map to place points — click near first point to close
         </div>
