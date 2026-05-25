@@ -1,16 +1,41 @@
-# React + Vite
+# AI Photo Gallery - Web Portal
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repository contains the web portal for the AI Photo Gallery system. Built with React and Vite, this portal provides a geographic visualization layer, allowing administrators or users to view photos mapped out based on where they were taken.
 
-Currently, two official plugins are available:
+## 🗺️ Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Interactive Maps:** Integrates `Leaflet` and `react-leaflet` to render a dynamic, navigable world map.
+- **Location Heatmaps:** Utilizes `leaflet.heat` to visually cluster and display the density of photos taken in specific geographic areas.
+- **Fast Performance:** Bootstrapped with Vite for instant server start and lightning-fast Hot Module Replacement (HMR).
+- **Responsive Web Design:** Ensures the map and dashboard are fully accessible on desktop and tablet browsers.
 
-## React Compiler
+## 🛠️ Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Framework:** React 19
+- **Build Tool:** Vite
+- **Mapping:** Leaflet, React-Leaflet, Leaflet.heat
+- **Routing:** React Router DOM
 
-## Expanding the ESLint configuration
+## 🚀 Getting Started
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Prerequisites
+- Node.js
+- npm or yarn
+
+### Installation
+
+1. Clone this repository.
+2. Install the necessary dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the Vite development server:
+   ```bash
+   npm run dev
+   ```
+4. Open your browser and navigate to the local server URL provided in the terminal (usually `http://localhost:5173`).
+
+## 🧩 How it connects to the system
+This is **3 of 3** repositories in the AI Photo Gallery ecosystem. 
+- It consumes data generated and processed by the **Backend Server**.
+- It complements the **Mobile App** by offering a top-down, map-based perspective of the user's photo collection and system activity.

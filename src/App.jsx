@@ -5,7 +5,8 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
-const API_BASE = "https://gallery.snorlax.codes";
+const API_BASE = "http://localhost:5069";
+// const API_BASE = "https://gallery.snorlax.codes";
 
 const getValidImageUrl = (url) => {
   if (!url) return "";
@@ -1122,9 +1123,9 @@ function AlertsPanel({ allPhotos, onAlertPhotoClick }) {
       setAlerts(as => as.map(a => a._id === id ? { ...a, status: "seen" } : a));
     } catch { }
   };
-
-  const unseen = alerts.filter(a => a.status !== "seen");
-  const seen = alerts.filter(a => a.status === "seen");
+  console.log("here: ",alerts[0])
+  const unseen = alerts.filter(a => a?.seen !== true);
+  const seen = alerts.filter(a => a?.seen === true);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 20, overflowY: "auto", height: "100%" }}>
